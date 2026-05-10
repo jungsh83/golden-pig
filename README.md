@@ -1,3 +1,9 @@
+> **Personal Fork** — 이 레포는 [koreainvestment/open-trading-api](https://github.com/koreainvestment/open-trading-api) 기반의 개인 자동매매 플랫폼입니다.
+> 자동매매 스크립트, 백테스팅, Claude Code AI 에이전트 연동이 추가되어 있습니다.
+> 업스트림 동기화: `git fetch upstream && git merge upstream/main`
+
+---
+
 **[당사에서 제공하는 샘플코드에 대한 유의사항]**
 
 - 샘플 코드는 한국투자증권 Open API(KIS Developers)를 연동하는 예시입니다. 고객님의 개발 부담을 줄이고자 참고용으로 제공되고 있습니다.
