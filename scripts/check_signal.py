@@ -14,6 +14,9 @@ from datetime import date, timedelta
 # backtester 루트를 sys.path에 추가
 BACKTESTER_DIR = Path(__file__).parent.parent / "backtester"
 sys.path.insert(0, str(BACKTESTER_DIR))
+sys.path.insert(0, str(Path(__file__).parent))
+
+from db_logger import log_signal
 
 DISCORD_TOKEN = os.environ.get("DISCORD_BOT_TOKEN", "")
 DISCORD_CHAT_ID = "1502591461063917670"
@@ -137,6 +140,15 @@ def main():
         if signal is None:
             send_discord(f"⚠️ [{now}] 005930 신호 확인 실패: 데이터 부족")
             return
+
+        macd_diff = 0.0
+        try:
+            from kis_backtest.providers.kis.auth import KISAuth
+            auth = KISAuth.from_env()
+            mode = "paper" if auth.is_paper else "live"
+        except Exception:
+            mode = "paper"
+        log_signal(SYMBOL, signal, rsi, macd_diff, strength or 0.0, price, mode=mode)
 
         emoji = {"BUY": "🟢", "SELL": "🔴", "HOLD": "⚪"}.get(signal, "⚪")
         bar = "█" * int((strength or 0) * 10) + "░" * (10 - int((strength or 0) * 10))

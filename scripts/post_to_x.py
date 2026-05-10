@@ -55,7 +55,7 @@ def send_discord(message: str):
 def _noco_get(table_id: str, where: str = "", limit: int = 100) -> list:
     params = f"?limit={limit}"
     if where:
-        params += f"&where={urllib.parse.quote(where)}"
+        params += f"&where={urllib.parse.quote(where, safe='(,)%')}"
     url = f"{NOCODB_URL}/api/v1/db/data/noco/{NOCODB_BASE}/{table_id}{params}"
     req = urllib.request.Request(url, headers={"xc-token": NOCODB_TOKEN})
     try:
