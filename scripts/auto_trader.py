@@ -66,13 +66,6 @@ STRATEGIES = {
         "rsi_entry": 45,
         "rsi_exit": 75,
     },
-    "003490": {
-        "name": "대한항공",
-        "macd_entry": {"fast": 6, "slow": 13, "signal": 5},   # 듀얼 MACD: 진입은 빠른 MACD
-        "macd_exit": {"fast": 12, "slow": 26, "signal": 9},   # 청산은 느린 MACD
-        "rsi_entry": 45,
-        "rsi_exit": 74,
-    },
 }
 
 
