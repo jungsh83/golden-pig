@@ -1,0 +1,61 @@
+version: "1.0"
+metadata:
+  name: 대한항공 MACD 모멘텀 전략
+  description: |
+    진입: MACD(12/26/9) 골든크로스 + RSI(14) > 45 (상승 추세 확인)
+    청산: MACD 데드크로스 OR RSI > 74 (과열 익절)
+    손절: -6% / 익절: +15% / 트레일링스탑: -4%
+    백테스트(2024-05~2026-05): -4.0% (승률 14%, 손익비 4.2)
+    ※ 2024~2025년 횡보장 신호 부재. 2026년 급등 구간에서 활성화.
+  category: momentum
+  author: user
+  ticker: "003490"
+
+strategy:
+  id: kal_macd_rsi_momentum
+  indicators:
+    - id: macd
+      alias: macd
+      params:
+        fast: 12
+        slow: 26
+        signal: 9
+    - id: rsi
+      alias: rsi
+      params:
+        period: 14
+
+  entry:
+    logic: AND
+    conditions:
+      - indicator: macd
+        output: value
+        operator: cross_above
+        compare_to: macd
+        compare_output: signal
+      - indicator: rsi
+        operator: greater_than
+        value: 45
+
+  exit:
+    logic: OR
+    conditions:
+      - indicator: macd
+        output: value
+        operator: cross_below
+        compare_to: macd
+        compare_output: signal
+      - indicator: rsi
+        operator: greater_than
+        value: 74
+
+risk:
+  stop_loss:
+    enabled: true
+    percent: 6.0
+  take_profit:
+    enabled: true
+    percent: 15.0
+  trailing_stop:
+    enabled: true
+    percent: 4.0
