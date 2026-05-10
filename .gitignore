@@ -156,6 +156,14 @@ yarn-error.log*
 KIS/
 .master/
 .kis_token*.json
+kis_devlp.yaml
+
+# ===== Docker secrets =====
+docker/nocodb/docker-compose.yml
+
+# ===== Claude Code (개인 설정) =====
+.mcp.json
+AGENTS.md
 
 # ===== Lean workspace =====
 .lean-workspace/

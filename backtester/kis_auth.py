@@ -185,7 +185,8 @@ def changeTREnv(token_key, svr="prod", product=_cfg["my_prod"]):
     except AttributeError:
         my_token = ""
     cfg["my_token"] = my_token if token_key else token_key
-    cfg["my_url_ws"] = _cfg["ops" if svr == "prod" else "vops"]
+    _ws_key = "ops" if svr == "prod" else "vops"
+    cfg["my_url_ws"] = _cfg.get(_ws_key, "wss://ops.koreainvestment.com:21000" if svr == "prod" else "wss://vops.koreainvestment.com:31000")
 
     # print(cfg)
     _setTRENV(cfg)
