@@ -42,6 +42,10 @@ STOCK_UNIVERSE = {
         {"code": "AMGN", "name": "Amgen", "market": "NASDAQ", "search_terms": ["AMGN", "Amgen"]},
         {"code": "GILD", "name": "Gilead Sciences", "market": "NASDAQ", "search_terms": ["GILD", "Gilead"]},
     ],
+    "인터넷_플랫폼_KR": [
+        {"code": "035420", "name": "네이버", "market": "KOSPI", "search_terms": ["네이버", "NAVER", "LINE", "하이퍼클로바"]},
+        {"code": "035720", "name": "카카오", "market": "KOSPI", "search_terms": ["카카오", "Kakao", "카카오페이", "카카오뱅크"]},
+    ],
     "암호화폐": [
         {"code": "BTC", "name": "비트코인", "market": "CRYPTO", "type": "crypto",
          "coingecko_id": "bitcoin", "search_terms": ["비트코인", "Bitcoin", "BTC"]},
