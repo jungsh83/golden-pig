@@ -1,0 +1,68 @@
+version: "1.0"
+metadata:
+  name: 대한항공 듀얼MACD 모멘텀 전략
+  description: |
+    진입: 빠른 MACD(6/13/5) 골든크로스 + RSI(14) > 45
+    청산: 느린 MACD(12/26/9) 데드크로스 OR RSI > 74 (과열 익절)
+    손절: -4% / 익절: +18% / 트레일링스탑: -3%
+    백테스트(2024-05~2026-05): +9.948% (연 +4.809%, MDD 8.5%, Sharpe 0.284)
+    승률 43% (7승 8패), 평균 수익 +7.39%, 평균 손실 -3.62%, 손익비 2.04
+    SK하이닉스 듀얼MACD 전략 동일 구조 적용 — 진입 민감도 높이고 청산 여유 확보
+  category: momentum
+  author: user
+  ticker: "003490"
+
+strategy:
+  id: kal_dual_macd_momentum
+  indicators:
+    - id: macd
+      alias: macd_fast
+      params:
+        fast: 6
+        slow: 13
+        signal: 5
+    - id: macd
+      alias: macd_slow
+      params:
+        fast: 12
+        slow: 26
+        signal: 9
+    - id: rsi
+      alias: rsi
+      params:
+        period: 14
+
+  entry:
+    logic: AND
+    conditions:
+      - indicator: macd_fast
+        output: value
+        operator: cross_above
+        compare_to: macd_fast
+        compare_output: signal
+      - indicator: rsi
+        operator: greater_than
+        value: 45
+
+  exit:
+    logic: OR
+    conditions:
+      - indicator: macd_slow
+        output: value
+        operator: cross_below
+        compare_to: macd_slow
+        compare_output: signal
+      - indicator: rsi
+        operator: greater_than
+        value: 74
+
+risk:
+  stop_loss:
+    enabled: true
+    percent: 4.0
+  take_profit:
+    enabled: true
+    percent: 18.0
+  trailing_stop:
+    enabled: true
+    percent: 3.0
