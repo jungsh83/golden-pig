@@ -66,6 +66,13 @@ STRATEGIES = {
         "rsi_entry": 45,
         "rsi_exit": 75,
     },
+    "003490": {
+        "name": "대한항공",
+        "macd_entry": {"fast": 12, "slow": 26, "signal": 9},
+        "macd_exit": {"fast": 12, "slow": 26, "signal": 9},
+        "rsi_entry": 45,
+        "rsi_exit": 74,
+    },
 }
 
 
