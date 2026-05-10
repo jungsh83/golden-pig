@@ -2,8 +2,11 @@
 """
 다종목 자동매매 스크립트 — 15분봉 기반
 사용법: python auto_trader.py [심볼]  (기본값: 005930)
-  python auto_trader.py 005930   — 삼성전자 MACD(8/17/6) + RSI
+  python auto_trader.py 005930   — 삼성전자 듀얼MACD(6/13/5 진입 / 12/26/9 청산) + RSI
   python auto_trader.py 000660   — SK하이닉스 듀얼MACD(6/13/5 진입 / 12/26/9 청산) + RSI
+  python auto_trader.py 006400   — 삼성SDI Stochastic(14,3) K<25 + RSI<40 역추세
+  python auto_trader.py 017670   — SKT CCI(20)<-80 + RSI<42 역추세
+  python auto_trader.py 002380   — KCC Stochastic(14,3) K<25 + RSI<40 역추세
 
 리스크 컨트롤:
 - MAX_INVEST_RATIO: 가용 현금의 최대 투자 비율 (기본 20%)
@@ -54,6 +57,7 @@ LOOKBACK_DAYS = 5
 STRATEGIES = {
     "005930": {
         "name": "삼성전자",
+        "type": "macd",
         "macd_entry": {"fast": 6, "slow": 13, "signal": 5},
         "macd_exit": {"fast": 12, "slow": 26, "signal": 9},
         "rsi_entry": 45,
@@ -61,10 +65,43 @@ STRATEGIES = {
     },
     "000660": {
         "name": "SK하이닉스",
+        "type": "macd",
         "macd_entry": {"fast": 6, "slow": 13, "signal": 5},
-        "macd_exit": {"fast": 12, "slow": 26, "signal": 9},  # 듀얼 MACD: 청산은 느린 MACD
+        "macd_exit": {"fast": 12, "slow": 26, "signal": 9},
         "rsi_entry": 45,
         "rsi_exit": 75,
+    },
+    "006400": {
+        "name": "삼성SDI",
+        "type": "stoch_rsi",
+        "stoch_period": 14,
+        "stoch_smooth": 3,
+        "stoch_entry_k": 25,
+        "stoch_exit_k": 75,
+        "rsi_period": 14,
+        "rsi_entry": 40,
+        "rsi_exit": 65,
+    },
+    "017670": {
+        "name": "SKT",
+        "type": "cci_rsi",
+        "cci_period": 20,
+        "cci_entry": -80,
+        "cci_exit": 80,
+        "rsi_period": 14,
+        "rsi_entry": 42,
+        "rsi_exit": 62,
+    },
+    "002380": {
+        "name": "KCC",
+        "type": "stoch_rsi",
+        "stoch_period": 14,
+        "stoch_smooth": 3,
+        "stoch_entry_k": 25,
+        "stoch_exit_k": 75,
+        "rsi_period": 14,
+        "rsi_entry": 40,
+        "rsi_exit": 65,
     },
 }
 
@@ -178,8 +215,32 @@ def compute_rsi(closes, period=14):
     return rsi_values
 
 
+def compute_stochastic(highs, lows, closes, k_period=14, smooth=3):
+    k_values = []
+    for i in range(k_period - 1, len(closes)):
+        h = max(highs[i - k_period + 1:i + 1])
+        l = min(lows[i - k_period + 1:i + 1])
+        k_values.append((closes[i] - l) / (h - l) * 100 if h != l else 50.0)
+    d_values = [
+        sum(k_values[i - smooth + 1:i + 1]) / smooth
+        for i in range(smooth - 1, len(k_values))
+    ]
+    return k_values, d_values
+
+
+def compute_cci(highs, lows, closes, period=20):
+    typical = [(h + l + c) / 3 for h, l, c in zip(highs, lows, closes)]
+    cci_values = []
+    for i in range(period - 1, len(typical)):
+        window = typical[i - period + 1:i + 1]
+        mean = sum(window) / period
+        mad = sum(abs(tp - mean) for tp in window) / period
+        cci_values.append((typical[i] - mean) / (0.015 * mad) if mad != 0 else 0.0)
+    return cci_values
+
+
 def get_signal_15min(symbol: str, cfg: dict):
-    """최근 5거래일 15분봉으로 전략별 MACD+RSI 신호 산출"""
+    """최근 5거래일 15분봉으로 전략별 신호 산출. extra_val은 MACD차 또는 Stoch K값."""
     from kis_backtest.providers.kis.auth import KISAuth
     from kis_backtest.providers.kis.data import KISDataProvider
     from kis_backtest.models import Resolution
@@ -203,48 +264,93 @@ def get_signal_15min(symbol: str, cfg: dict):
     closes = [b.close for b in bars_15m]
     current_price = closes[-1]
 
-    # 진입용 MACD
-    ep = cfg["macd_entry"]
-    entry_macd, entry_signal = compute_macd(closes, ep["fast"], ep["slow"], ep["signal"])
-
-    # 청산용 MACD (듀얼이면 별도, 아니면 진입과 동일)
-    xp = cfg["macd_exit"] or ep
-    if cfg["macd_exit"]:
-        exit_macd, exit_signal = compute_macd(closes, xp["fast"], xp["slow"], xp["signal"])
-    else:
-        exit_macd, exit_signal = entry_macd, entry_signal
-
-    rsi_values = compute_rsi(closes)
+    rsi_period = cfg.get("rsi_period", 14)
+    rsi_values = compute_rsi(closes, rsi_period)
     if not rsi_values:
         return None, None, None, None, None, None, None
-
     rsi = rsi_values[-1]
 
-    # 진입 크로스 (빠른 MACD)
-    em_prev, em_curr = entry_macd[-2], entry_macd[-1]
-    es_prev, es_curr = entry_signal[-2], entry_signal[-1]
-    cross_above = em_prev <= es_prev and em_curr > es_curr
+    strategy_type = cfg.get("type", "macd")
 
-    # 청산 크로스 (느린 MACD 또는 동일)
-    xm_prev, xm_curr = exit_macd[-2], exit_macd[-1]
-    xs_prev, xs_curr = exit_signal[-2], exit_signal[-1]
-    cross_below = xm_prev >= xs_prev and xm_curr < xs_curr
+    if strategy_type == "stoch_rsi":
+        highs = [b.high for b in bars_15m]
+        lows = [b.low for b in bars_15m]
+        k_values, _ = compute_stochastic(highs, lows, closes,
+                                          cfg["stoch_period"], cfg["stoch_smooth"])
+        if not k_values:
+            return None, None, None, None, None, None, None
+        stoch_k = k_values[-1]
 
-    rsi_entry = cfg["rsi_entry"]
-    rsi_exit = cfg["rsi_exit"]
+        if stoch_k < cfg["stoch_entry_k"] and rsi < cfg["rsi_entry"]:
+            trade_signal = "BUY"
+            stoch_str = (cfg["stoch_entry_k"] - stoch_k) / cfg["stoch_entry_k"]
+            rsi_str = (cfg["rsi_entry"] - rsi) / cfg["rsi_entry"]
+            strength = min((stoch_str + rsi_str) / 2, 1.0)
+        elif stoch_k > cfg["stoch_exit_k"] or rsi > cfg["rsi_exit"]:
+            trade_signal = "SELL"
+            strength = 0.7
+        else:
+            trade_signal = "HOLD"
+            strength = 0.0
 
-    if cross_above and rsi > rsi_entry:
-        trade_signal = "BUY"
-        strength = min((rsi - rsi_entry) / (100 - rsi_entry), 1.0)
-    elif cross_below or rsi > rsi_exit:
-        trade_signal = "SELL"
-        strength = min((rsi - rsi_exit) / (100 - rsi_exit), 1.0) if rsi > rsi_exit else 0.7
-    else:
-        trade_signal = "HOLD"
-        strength = 0.0
+        extra_val = round(stoch_k, 1)
 
-    macd_diff = round(em_curr - es_curr, 5)
-    return trade_signal, round(strength, 2), round(rsi, 1), current_price, auth, macd_diff, len(bars_15m)
+    elif strategy_type == "cci_rsi":
+        highs = [b.high for b in bars_15m]
+        lows = [b.low for b in bars_15m]
+        cci_values = compute_cci(highs, lows, closes, cfg["cci_period"])
+        if not cci_values:
+            return None, None, None, None, None, None, None
+        cci = cci_values[-1]
+
+        if cci < cfg["cci_entry"] and rsi < cfg["rsi_entry"]:
+            trade_signal = "BUY"
+            cci_str = min((cfg["cci_entry"] - cci) / abs(cfg["cci_entry"]), 1.0)
+            rsi_str = (cfg["rsi_entry"] - rsi) / cfg["rsi_entry"]
+            strength = min((cci_str + rsi_str) / 2, 1.0)
+        elif cci > cfg["cci_exit"] or rsi > cfg["rsi_exit"]:
+            trade_signal = "SELL"
+            strength = 0.7
+        else:
+            trade_signal = "HOLD"
+            strength = 0.0
+
+        extra_val = round(cci, 1)
+
+    else:  # macd
+        ep = cfg["macd_entry"]
+        entry_macd, entry_sig = compute_macd(closes, ep["fast"], ep["slow"], ep["signal"])
+
+        xp = cfg.get("macd_exit")
+        if xp:
+            exit_macd, exit_sig = compute_macd(closes, xp["fast"], xp["slow"], xp["signal"])
+        else:
+            exit_macd, exit_sig = entry_macd, entry_sig
+
+        em_prev, em_curr = entry_macd[-2], entry_macd[-1]
+        es_prev, es_curr = entry_sig[-2], entry_sig[-1]
+        cross_above = em_prev <= es_prev and em_curr > es_curr
+
+        xm_prev, xm_curr = exit_macd[-2], exit_macd[-1]
+        xs_prev, xs_curr = exit_sig[-2], exit_sig[-1]
+        cross_below = xm_prev >= xs_prev and xm_curr < xs_curr
+
+        rsi_entry = cfg["rsi_entry"]
+        rsi_exit = cfg["rsi_exit"]
+
+        if cross_above and rsi > rsi_entry:
+            trade_signal = "BUY"
+            strength = min((rsi - rsi_entry) / (100 - rsi_entry), 1.0)
+        elif cross_below or rsi > rsi_exit:
+            trade_signal = "SELL"
+            strength = min((rsi - rsi_exit) / (100 - rsi_exit), 1.0) if rsi > rsi_exit else 0.7
+        else:
+            trade_signal = "HOLD"
+            strength = 0.0
+
+        extra_val = round(em_curr - es_curr, 5)
+
+    return trade_signal, round(strength, 2), round(rsi, 1), current_price, auth, extra_val, len(bars_15m)
 
 
 def check_market_hours() -> bool:
@@ -262,13 +368,13 @@ def run_auto_trader(symbol: str):
         print(f"[{now_str}] [{name}] 장 시간 외 — 주문 생략")
         return
 
-    signal, strength, rsi, current_price, auth, macd_diff, bars_count = get_signal_15min(symbol, cfg)
+    signal, strength, rsi, current_price, auth, extra_val, bars_count = get_signal_15min(symbol, cfg)
     if signal is None:
         send_discord(f"⚠️ [{now_str}] {name}({symbol}) 15분봉 신호 계산 실패 (데이터 부족)")
         return
 
     mode = "paper" if auth.is_paper else "live"
-    log_signal(symbol, signal, rsi, macd_diff, strength or 0.0, current_price, bars_count, mode)
+    log_signal(symbol, signal, rsi, extra_val, strength or 0.0, current_price, bars_count, mode)
 
     if signal == "HOLD":
         print(f"[{now_str}] [{name}] HOLD — 주문 없음 (RSI {rsi})")
@@ -333,11 +439,26 @@ def run_auto_trader(symbol: str):
 
         bar = "█" * int(s * 10) + "░" * (10 - int(s * 10))
 
-        ep = cfg["macd_entry"]
-        xp = cfg["macd_exit"]
-        macd_desc = f"MACD({ep['fast']}/{ep['slow']}/{ep['signal']})"
-        if xp:
-            macd_desc += f" 진입 | MACD({xp['fast']}/{xp['slow']}/{xp['signal']}) 청산"
+        strategy_type = cfg.get("type", "macd")
+        if strategy_type == "stoch_rsi":
+            strategy_desc = (
+                f"Stoch({cfg['stoch_period']},{cfg['stoch_smooth']}) K<{cfg['stoch_entry_k']}"
+                f" + RSI<{cfg['rsi_entry']} 역추세"
+            )
+            extra_label = f"Stoch K:  {extra_val}"
+        elif strategy_type == "cci_rsi":
+            strategy_desc = (
+                f"CCI({cfg['cci_period']}) < {cfg['cci_entry']}"
+                f" + RSI < {cfg['rsi_entry']} 역추세"
+            )
+            extra_label = f"CCI({cfg['cci_period']}): {extra_val}"
+        else:
+            ep = cfg["macd_entry"]
+            xp = cfg.get("macd_exit")
+            strategy_desc = f"MACD({ep['fast']}/{ep['slow']}/{ep['signal']})"
+            if xp:
+                strategy_desc += f" 진입 | MACD({xp['fast']}/{xp['slow']}/{xp['signal']}) 청산"
+            extra_label = f"MACD차:   {extra_val}"
 
         msg = (
             f"🟢 [{now_str}] **{name}({symbol}) 자동 매수 주문 완료**\n"
@@ -347,8 +468,9 @@ def run_auto_trader(symbol: str):
             f"현재가:   {current_price:,.0f}원\n"
             f"투자금:   {qty * current_price:,.0f}원 (가용현금의 {invest_ratio:.0%}, 강도 {int(s*100)}%)\n"
             f"RSI(14):  {rsi}  (15분봉)\n"
+            f"{extra_label}\n"
             f"강도:     [{bar}] {int(s * 100)}%\n"
-            f"전략:     {macd_desc}\n"
+            f"전략:     {strategy_desc}\n"
             f"```"
         )
         send_discord(msg)
@@ -360,11 +482,23 @@ def run_auto_trader(symbol: str):
             return
 
         # 매도 사유 판단
-        rsi_exit = cfg["rsi_exit"]
-        if rsi > rsi_exit:
-            sell_reason = f"과열 익절 (RSI {rsi} > {rsi_exit})"
+        strategy_type = cfg.get("type", "macd")
+        if strategy_type == "stoch_rsi":
+            if rsi > cfg["rsi_exit"]:
+                sell_reason = f"과열 익절 (RSI {rsi} > {cfg['rsi_exit']})"
+            else:
+                sell_reason = f"Stochastic 과매수 (K {extra_val} > {cfg['stoch_exit_k']})"
+        elif strategy_type == "cci_rsi":
+            if rsi > cfg["rsi_exit"]:
+                sell_reason = f"과열 익절 (RSI {rsi} > {cfg['rsi_exit']})"
+            else:
+                sell_reason = f"CCI 과매수 ({extra_val} > {cfg['cci_exit']})"
         else:
-            sell_reason = "MACD 데드크로스"
+            rsi_exit = cfg["rsi_exit"]
+            if rsi > rsi_exit:
+                sell_reason = f"과열 익절 (RSI {rsi} > {rsi_exit})"
+            else:
+                sell_reason = "MACD 데드크로스"
 
         order = broker.submit_order(symbol, OrderSide.SELL, holding_qty, OrderType.MARKET)
         profit = (current_price - holding.average_price) * holding_qty

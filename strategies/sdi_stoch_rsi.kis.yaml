@@ -1,0 +1,58 @@
+version: "1.0"
+metadata:
+  name: 삼성SDI Stochastic+RSI 역추세 전략
+  description: |
+    진입: Stochastic(14,3) K < 25 AND RSI(14) < 40 (과매도 반등)
+    청산: Stochastic K > 75 OR RSI > 65 (과매수 청산)
+    손절: -5% / 익절: +18% / 트레일링스탑: -4%
+    백테스트(2024-05~2026-05): +10.33% (MDD 4.8%, Sharpe 0.413, 승률 50%, 손익비 4.32)
+    듀얼MACD(+10.99%, MDD 20.1%, Sharpe 0.293) 대비 MDD 1/4, 손익비 우월
+  category: mean_reversion
+  author: user
+  ticker: "006400"
+
+strategy:
+  id: sdi_stoch_rsi_mean_reversion
+  indicators:
+    - id: stochastic
+      alias: stoch
+      params:
+        k_period: 14
+        d_period: 3
+    - id: rsi
+      alias: rsi
+      params:
+        period: 14
+
+  entry:
+    logic: AND
+    conditions:
+      - indicator: stoch
+        output: k
+        operator: less_than
+        value: 25
+      - indicator: rsi
+        operator: less_than
+        value: 40
+
+  exit:
+    logic: OR
+    conditions:
+      - indicator: stoch
+        output: k
+        operator: greater_than
+        value: 75
+      - indicator: rsi
+        operator: greater_than
+        value: 65
+
+risk:
+  stop_loss:
+    enabled: true
+    percent: 5.0
+  take_profit:
+    enabled: true
+    percent: 18.0
+  trailing_stop:
+    enabled: true
+    percent: 4.0

@@ -1,0 +1,56 @@
+version: "1.0"
+metadata:
+  name: SKT CCI+RSI 역추세 전략
+  description: |
+    진입: CCI(20) < -80 AND RSI(14) < 42 (과매도 반등)
+    청산: CCI(20) > 80 OR RSI > 62 (평균 회귀 완료)
+    손절: -4% / 익절: +14% / 트레일링스탑: -3%
+    백테스트(2024-05~2026-05): +6.84% (MDD 6.4%, Sharpe 0.265, 승률 71%)
+    듀얼MACD(+3.38%, MDD 12.8%) 대비 수익률 2배, MDD 절반
+    통신주 박스권 횡보 특성 → 역추세 전략 구조적 우위
+  category: mean_reversion
+  author: user
+  ticker: "017670"
+
+strategy:
+  id: skt_cci_rsi_mean_reversion
+  indicators:
+    - id: cci
+      alias: cci
+      params:
+        period: 20
+    - id: rsi
+      alias: rsi
+      params:
+        period: 14
+
+  entry:
+    logic: AND
+    conditions:
+      - indicator: cci
+        operator: less_than
+        value: -80
+      - indicator: rsi
+        operator: less_than
+        value: 42
+
+  exit:
+    logic: OR
+    conditions:
+      - indicator: cci
+        operator: greater_than
+        value: 80
+      - indicator: rsi
+        operator: greater_than
+        value: 62
+
+risk:
+  stop_loss:
+    enabled: true
+    percent: 4.0
+  take_profit:
+    enabled: true
+    percent: 14.0
+  trailing_stop:
+    enabled: true
+    percent: 3.0
