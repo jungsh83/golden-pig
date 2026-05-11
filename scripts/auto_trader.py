@@ -7,6 +7,7 @@
   python auto_trader.py 006400   — 삼성SDI Stochastic(14,3) K<25 + RSI<40 역추세
   python auto_trader.py 017670   — SKT CCI(20)<-80 + RSI<42 역추세
   python auto_trader.py 002380   — KCC Stochastic(14,3) K<25 + RSI<40 역추세
+  python auto_trader.py 240810   — 원익IPS CCI(14)<-50 + RSI<48 역추세
 
 리스크 컨트롤:
 - MAX_INVEST_RATIO: 가용 현금의 최대 투자 비율 (기본 20%)
@@ -102,6 +103,16 @@ STRATEGIES = {
         "rsi_period": 14,
         "rsi_entry": 40,
         "rsi_exit": 65,
+    },
+    "240810": {
+        "name": "원익IPS",
+        "type": "cci_rsi",
+        "cci_period": 14,
+        "cci_entry": -50,
+        "cci_exit": 60,
+        "rsi_period": 14,
+        "rsi_entry": 48,
+        "rsi_exit": 68,
     },
 }
 

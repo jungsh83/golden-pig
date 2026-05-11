@@ -1,0 +1,56 @@
+version: "1.0"
+metadata:
+  name: 원익IPS CCI+RSI 완화 역추세 전략
+  description: |
+    진입: CCI(14) < -50 AND RSI(14) < 48 (반도체 강세장 완화 기준)
+    청산: CCI > 60 OR RSI > 68
+    손절: -6% / 익절: +22% / 트레일링스탑: -5%
+    백테스트(2024-05~2026-05): +18.98% (MDD 8.5%, Sharpe 0.483, 승률 67%, 6회 거래)
+    원 전략 (CCI<-80): 2회 거래, +16.51% / 완화 전략 (CCI<-50): 6회 거래, +18.98%
+    반도체 강세장 고려 — CCI 임계값 완화로 거래 빈도 3배 증가
+  category: mean_reversion
+  author: user
+  ticker: "240810"
+
+strategy:
+  id: wonik_ips_cci_rsi_mean_reversion
+  indicators:
+    - id: cci
+      alias: cci
+      params:
+        period: 14
+    - id: rsi
+      alias: rsi
+      params:
+        period: 14
+
+  entry:
+    logic: AND
+    conditions:
+      - indicator: cci
+        operator: less_than
+        value: -50
+      - indicator: rsi
+        operator: less_than
+        value: 48
+
+  exit:
+    logic: OR
+    conditions:
+      - indicator: cci
+        operator: greater_than
+        value: 60
+      - indicator: rsi
+        operator: greater_than
+        value: 68
+
+risk:
+  stop_loss:
+    enabled: true
+    percent: 6.0
+  take_profit:
+    enabled: true
+    percent: 22.0
+  trailing_stop:
+    enabled: true
+    percent: 5.0
