@@ -501,28 +501,34 @@ def run_auto_trader(symbol: str):
             print(f"[{now_str}] [{name}] 보유 없음 — 매도 생략")
             return
 
-        # 매도 사유 판단
+        # 청산 트리거 판단 (수익 여부와 무관한 기술적 조건)
         strategy_type = cfg.get("type", "macd")
         if strategy_type == "stoch_rsi":
             if rsi > cfg["rsi_exit"]:
-                sell_reason = f"과열 익절 (RSI {rsi} > {cfg['rsi_exit']})"
+                exit_trigger = f"RSI 청산 ({rsi} > {cfg['rsi_exit']})"
             else:
-                sell_reason = f"Stochastic 과매수 (K {extra_val} > {cfg['stoch_exit_k']})"
+                exit_trigger = f"Stochastic 과매수 청산 (K {extra_val} > {cfg['stoch_exit_k']})"
         elif strategy_type == "cci_rsi":
             if rsi > cfg["rsi_exit"]:
-                sell_reason = f"과열 익절 (RSI {rsi} > {cfg['rsi_exit']})"
+                exit_trigger = f"RSI 청산 ({rsi} > {cfg['rsi_exit']})"
             else:
-                sell_reason = f"CCI 과매수 ({extra_val} > {cfg['cci_exit']})"
+                exit_trigger = f"CCI 과매수 청산 ({extra_val} > {cfg['cci_exit']})"
         else:
             rsi_exit = cfg["rsi_exit"]
             if rsi > rsi_exit:
-                sell_reason = f"과열 익절 (RSI {rsi} > {rsi_exit})"
+                exit_trigger = f"RSI 청산 ({rsi} > {rsi_exit})"
             else:
-                sell_reason = "MACD 데드크로스"
+                exit_trigger = "MACD 데드크로스"
 
         order = broker.submit_order(symbol, OrderSide.SELL, holding_qty, OrderType.MARKET)
         profit = (current_price - holding.average_price) * holding_qty
         profit_rate = (current_price - holding.average_price) / holding.average_price * 100
+
+        # 수익 여부에 따라 최종 사유 라벨 결정
+        if profit >= 0:
+            sell_reason = f"익절 — {exit_trigger}"
+        else:
+            sell_reason = f"손절 — {exit_trigger}"
         log_trade(symbol, "SELL", holding_qty, current_price, order.id, profit, profit_rate, rsi, signal, mode)
 
         today_state.setdefault("trades", []).append({
