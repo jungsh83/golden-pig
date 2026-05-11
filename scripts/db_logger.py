@@ -193,7 +193,7 @@ def save_bars_15m(symbol: str, bars: list) -> int:
         for b in bars
     ]
     # NocoDB bulk insert
-    url = f"{_URL}/api/v1/db/data/noco/{_BASE}/{_TABLE_BARS}/bulk"
+    url = f"{_URL}/api/v1/db/data/bulk/noco/{_BASE}/{_TABLE_BARS}"
     data = json.dumps(rows).encode()
     req = urllib.request.Request(
         url, data=data,
