@@ -251,13 +251,13 @@ def compute_cci(highs, lows, closes, period=20):
 
 
 def get_signal_15min(symbol: str, cfg: dict):
-    """최근 5거래일 15분봉으로 전략별 신호 산출. extra_val은 MACD차 또는 Stoch K값."""
+    """최근 5거래일 15분봉으로 전략별 신호 산출. 시세 조회는 항상 실전 API 사용."""
     from kis_backtest.providers.kis.auth import KISAuth
     from kis_backtest.providers.kis.data import KISDataProvider
     from kis_backtest.models import Resolution
 
-    auth = KISAuth.from_env()
-    provider = KISDataProvider(auth)
+    live_auth = KISAuth.from_env(mode="live")
+    provider = KISDataProvider(live_auth)
 
     trading_days = _trading_days_back(LOOKBACK_DAYS)
     all_bars_1m = []
@@ -274,7 +274,7 @@ def get_signal_15min(symbol: str, cfg: dict):
 
     if len(bars_15m) < MIN_BARS:
         print(f"15분봉 데이터 부족: {len(bars_15m)}봉 (최소 {MIN_BARS}봉 필요)")
-        return None, None, None, None, None, None, None
+        return None, None, None, None, None, None
 
     closes = [b.close for b in bars_15m]
     current_price = closes[-1]
@@ -282,7 +282,7 @@ def get_signal_15min(symbol: str, cfg: dict):
     rsi_period = cfg.get("rsi_period", 14)
     rsi_values = compute_rsi(closes, rsi_period)
     if not rsi_values:
-        return None, None, None, None, None, None, None
+        return None, None, None, None, None, None
     rsi = rsi_values[-1]
 
     strategy_type = cfg.get("type", "macd")
@@ -293,7 +293,7 @@ def get_signal_15min(symbol: str, cfg: dict):
         k_values, _ = compute_stochastic(highs, lows, closes,
                                           cfg["stoch_period"], cfg["stoch_smooth"])
         if not k_values:
-            return None, None, None, None, None, None, None
+            return None, None, None, None, None, None
         stoch_k = k_values[-1]
 
         if stoch_k < cfg["stoch_entry_k"] and rsi < cfg["rsi_entry"]:
@@ -315,7 +315,7 @@ def get_signal_15min(symbol: str, cfg: dict):
         lows = [b.low for b in bars_15m]
         cci_values = compute_cci(highs, lows, closes, cfg["cci_period"])
         if not cci_values:
-            return None, None, None, None, None, None, None
+            return None, None, None, None, None, None
         cci = cci_values[-1]
 
         if cci < cfg["cci_entry"] and rsi < cfg["rsi_entry"]:
@@ -365,7 +365,7 @@ def get_signal_15min(symbol: str, cfg: dict):
 
         extra_val = round(em_curr - es_curr, 5)
 
-    return trade_signal, round(strength, 2), round(rsi, 1), current_price, auth, extra_val, len(bars_15m)
+    return trade_signal, round(strength, 2), round(rsi, 1), current_price, extra_val, len(bars_15m)
 
 
 def check_market_hours() -> bool:
@@ -383,22 +383,24 @@ def run_auto_trader(symbol: str):
         print(f"[{now_str}] [{name}] 장 시간 외 — 주문 생략")
         return
 
-    signal, strength, rsi, current_price, auth, extra_val, bars_count = get_signal_15min(symbol, cfg)
+    signal, strength, rsi, current_price, extra_val, bars_count = get_signal_15min(symbol, cfg)
     if signal is None:
         send_discord(f"⚠️ [{now_str}] {name}({symbol}) 15분봉 신호 계산 실패 (데이터 부족)")
         return
 
-    mode = "paper" if auth.is_paper else "live"
+    from kis_backtest.providers.kis.auth import KISAuth
+    from kis_backtest.providers.kis.brokerage import KISBrokerageProvider
+    from kis_backtest.models import OrderSide, OrderType
+
+    trade_auth = KISAuth.from_env()  # 자동 감지 (paper/live)
+    mode = "paper" if trade_auth.is_paper else "live"
     log_signal(symbol, signal, rsi, extra_val, strength or 0.0, current_price, bars_count, mode)
 
     if signal == "HOLD":
         print(f"[{now_str}] [{name}] HOLD — 주문 없음 (RSI {rsi})")
         return
 
-    from kis_backtest.providers.kis.brokerage import KISBrokerageProvider
-    from kis_backtest.models import OrderSide, OrderType
-
-    broker = KISBrokerageProvider.from_auth(auth)
+    broker = KISBrokerageProvider.from_auth(trade_auth)
     balance = broker.get_balance()
     time.sleep(0.5)
     positions = broker.get_positions()
