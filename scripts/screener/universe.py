@@ -42,6 +42,9 @@ STOCK_UNIVERSE = {
         {"code": "AMGN", "name": "Amgen", "market": "NASDAQ", "search_terms": ["AMGN", "Amgen"]},
         {"code": "GILD", "name": "Gilead Sciences", "market": "NASDAQ", "search_terms": ["GILD", "Gilead"]},
     ],
+    "철강_KR": [
+        {"code": "004020", "name": "현대제철", "market": "KOSPI", "search_terms": ["현대제철", "Hyundai Steel"]},
+    ],
     "저PBR_KR": [
         {"code": "002380", "name": "KCC", "market": "KOSPI", "search_terms": ["KCC", "케이씨씨", "모멘티브"]},
     ],
