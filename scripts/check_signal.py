@@ -19,7 +19,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from db_logger import log_signal
 
 DISCORD_TOKEN = os.environ.get("DISCORD_BOT_TOKEN", "")
-DISCORD_CHAT_ID = "1502591461063917670"
+DISCORD_CHAT_ID = "1491445572345790626"  # 스크리닝 채널
 SYMBOL = "005930"
 
 
