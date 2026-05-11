@@ -13,6 +13,7 @@ trade_log, signal_log, screener_log 테이블에 적재.
 import os
 import json
 import urllib.request
+import urllib.parse
 from datetime import datetime
 from pathlib import Path
 
@@ -33,6 +34,7 @@ _BASE = os.environ.get("NOCODB_BASE_ID", "")
 _TABLE_TRADE = os.environ.get("NOCODB_TABLE_TRADE", "")
 _TABLE_SIGNAL = os.environ.get("NOCODB_TABLE_SIGNAL", "")
 _TABLE_SCREENER = os.environ.get("NOCODB_TABLE_SCREENER", "")
+_TABLE_BARS = os.environ.get("NOCODB_TABLE_BARS", "")
 
 
 def _insert(table_id: str, row: dict) -> bool:
@@ -133,3 +135,73 @@ def log_screener(
         "sentiment_reason": sentiment_reason,
     }
     return _insert(_TABLE_SCREENER, row)
+
+
+def _noco_get(table_id: str, where: str = "", sort: str = "", limit: int = 500) -> list:
+    if not _TOKEN or not _BASE or not table_id:
+        return []
+    params = f"limit={limit}"
+    if where:
+        params += f"&where={urllib.parse.quote(where, safe='(,)~%')}"
+    if sort:
+        params += f"&sort={sort}"
+    url = f"{_URL}/api/v1/db/data/noco/{_BASE}/{table_id}?{params}"
+    req = urllib.request.Request(url, headers={"xc-token": _TOKEN})
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            return json.loads(resp.read()).get("list", [])
+    except Exception as e:
+        print(f"[db_logger] NocoDB 조회 실패: {e}")
+        return []
+
+
+def get_latest_bar_time(symbol: str):
+    """심볼의 가장 최근 15분봉 시간 반환. 없으면 None."""
+    rows = _noco_get(_TABLE_BARS, where=f"(symbol,eq,{symbol})", sort="-bar_time", limit=1)
+    if rows:
+        try:
+            return datetime.strptime(rows[0]["bar_time"], "%Y-%m-%d %H:%M:%S")
+        except Exception:
+            return None
+    return None
+
+
+def load_bars_15m(symbol: str, since: datetime) -> list[dict]:
+    """since 이후 15분봉 로드. [{bar_time, open, high, low, close, volume}, ...]"""
+    since_str = since.strftime("%Y-%m-%d %H:%M:%S")
+    rows = _noco_get(
+        _TABLE_BARS,
+        where=f"(symbol,eq,{symbol})~and(bar_time,gte,{since_str})",
+        sort="bar_time",
+        limit=2000,
+    )
+    return rows
+
+
+def save_bars_15m(symbol: str, bars: list) -> int:
+    """15분봉 NocoDB 저장. bars는 kis_backtest.models.Bar 리스트."""
+    if not _TOKEN or not _BASE or not _TABLE_BARS or not bars:
+        return 0
+    saved = 0
+    rows = [
+        {
+            "symbol": symbol,
+            "bar_time": b.time.strftime("%Y-%m-%d %H:%M:%S"),
+            "open": b.open, "high": b.high, "low": b.low,
+            "close": b.close, "volume": b.volume,
+        }
+        for b in bars
+    ]
+    # NocoDB bulk insert
+    url = f"{_URL}/api/v1/db/data/noco/{_BASE}/{_TABLE_BARS}/bulk"
+    data = json.dumps(rows).encode()
+    req = urllib.request.Request(
+        url, data=data,
+        headers={"xc-token": _TOKEN, "Content-Type": "application/json"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            saved = len(rows) if resp.status in (200, 201) else 0
+    except Exception as e:
+        print(f"[db_logger] bars_15m bulk 저장 실패: {e}")
+    return saved

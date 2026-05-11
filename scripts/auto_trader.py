@@ -254,26 +254,63 @@ def compute_cci(highs, lows, closes, period=20):
 
 
 def get_signal_15min(symbol: str, cfg: dict):
-    """최근 5거래일 15분봉으로 전략별 신호 산출. 시세 조회는 항상 실전 API 사용."""
+    """15분봉 신호 산출. NocoDB 캐시 활용 — 마지막 저장 봉 이후 데이터만 KIS API 호출."""
     from kis_backtest.providers.kis.auth import KISAuth
     from kis_backtest.providers.kis.data import KISDataProvider
     from kis_backtest.models import Resolution
+    from db_logger import get_latest_bar_time, load_bars_15m, save_bars_15m
 
     live_auth = KISAuth.from_env(mode="live")
     provider = KISDataProvider(live_auth)
 
-    trading_days = _trading_days_back(LOOKBACK_DAYS)
+    now = datetime.now()
+    five_days_ago = now - timedelta(days=7)
+
+    # ── 캐시 로드
+    latest_cached_dt = get_latest_bar_time(symbol)
+    cached_rows = load_bars_15m(symbol, five_days_ago) if latest_cached_dt else []
+
+    # ── 새로 수집할 거래일 결정 (캐시 있으면 오늘만, 없으면 5거래일 전체)
+    if latest_cached_dt and latest_cached_dt.date() >= (now.date() - timedelta(days=1)):
+        fetch_days = [d for d in _trading_days_back(LOOKBACK_DAYS) if d >= latest_cached_dt.date()]
+    else:
+        fetch_days = _trading_days_back(LOOKBACK_DAYS)
+
     all_bars_1m = []
-    for d in trading_days:
+    for d in fetch_days:
         for attempt in range(3):
             bars = provider.get_history(symbol, d, d, resolution=Resolution.MINUTE)
             if bars:
                 break
-            time.sleep(2.0 * (attempt + 1))  # EGW00201 rate limit 재시도
+            time.sleep(2.0 * (attempt + 1))
         all_bars_1m.extend(bars)
         time.sleep(1.2)
 
-    bars_15m = aggregate_to_15min(all_bars_1m)
+    new_15m = aggregate_to_15min(all_bars_1m)
+
+    # ── 새 봉만 필터해서 NocoDB 저장
+    if latest_cached_dt:
+        to_save = [b for b in new_15m if b.time > latest_cached_dt]
+    else:
+        to_save = new_15m
+    if to_save:
+        save_bars_15m(symbol, to_save)
+
+    # ── 캐시 + 새 봉 합산 (Bar 객체로 변환)
+    from kis_backtest.models import Bar
+    cached_times = {b.time for b in new_15m}
+    cached_bars = []
+    for r in cached_rows:
+        try:
+            t = datetime.strptime(r["bar_time"], "%Y-%m-%d %H:%M:%S")
+            if t not in cached_times:
+                cached_bars.append(Bar(
+                    time=t, open=r["open"], high=r["high"],
+                    low=r["low"], close=r["close"], volume=int(r.get("volume") or 0),
+                ))
+        except Exception:
+            continue
+    bars_15m = sorted(cached_bars + new_15m, key=lambda b: b.time)
 
     if len(bars_15m) < MIN_BARS:
         print(f"15분봉 데이터 부족: {len(bars_15m)}봉 (최소 {MIN_BARS}봉 필요)")
@@ -281,10 +318,9 @@ def get_signal_15min(symbol: str, cfg: dict):
 
     # 마지막 봉이 30분 이상 오래됐으면 stale 데이터 — 신호 생략
     last_bar_time = bars_15m[-1].time
-    now = datetime.now()
     stale_minutes = (now - last_bar_time).total_seconds() / 60
     if stale_minutes > 30:
-        print(f"데이터 신선도 부족: 마지막 봉 {last_bar_time.strftime('%H:%M')} ({stale_minutes:.0f}분 전) — 오늘 시세 조회 실패로 추정")
+        print(f"데이터 신선도 부족: 마지막 봉 {last_bar_time.strftime('%H:%M')} ({stale_minutes:.0f}분 전)")
         return None, None, None, None, None, None
 
     closes = [b.close for b in bars_15m]
