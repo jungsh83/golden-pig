@@ -43,6 +43,9 @@ DISCORD_TOKEN = os.environ.get("DISCORD_BOT_TOKEN", "")
 DISCORD_CHAT_ID = "1491445955185217587"  # 거래 알림 전용 채널
 STATE_FILE = Path(__file__).parent / "trader_state.json"
 
+# 매매 모드: "paper"(모의) or "live"(실전) — 환경변수 KIS_TRADE_MODE로 재정의 가능
+TRADE_MODE = os.environ.get("KIS_TRADE_MODE", "paper")
+
 from db_logger import log_trade, log_signal
 
 MAX_INVEST_RATIO = 0.30   # 신호 강도 100%일 때 최대 비중
@@ -392,7 +395,7 @@ def run_auto_trader(symbol: str):
     from kis_backtest.providers.kis.brokerage import KISBrokerageProvider
     from kis_backtest.models import OrderSide, OrderType
 
-    trade_auth = KISAuth.from_env()  # 자동 감지 (paper/live)
+    trade_auth = KISAuth.from_env(mode=TRADE_MODE)  # 명시적 모드 (자동감지 충돌 방지)
     mode = "paper" if trade_auth.is_paper else "live"
     log_signal(symbol, signal, rsi, extra_val, strength or 0.0, current_price, bars_count, mode)
 
