@@ -279,6 +279,14 @@ def get_signal_15min(symbol: str, cfg: dict):
         print(f"15분봉 데이터 부족: {len(bars_15m)}봉 (최소 {MIN_BARS}봉 필요)")
         return None, None, None, None, None, None
 
+    # 마지막 봉이 30분 이상 오래됐으면 stale 데이터 — 신호 생략
+    last_bar_time = bars_15m[-1].time
+    now = datetime.now()
+    stale_minutes = (now - last_bar_time).total_seconds() / 60
+    if stale_minutes > 30:
+        print(f"데이터 신선도 부족: 마지막 봉 {last_bar_time.strftime('%H:%M')} ({stale_minutes:.0f}분 전) — 오늘 시세 조회 실패로 추정")
+        return None, None, None, None, None, None
+
     closes = [b.close for b in bars_15m]
     current_price = closes[-1]
 
