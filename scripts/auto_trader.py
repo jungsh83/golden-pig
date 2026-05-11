@@ -262,9 +262,13 @@ def get_signal_15min(symbol: str, cfg: dict):
     trading_days = _trading_days_back(LOOKBACK_DAYS)
     all_bars_1m = []
     for d in trading_days:
-        bars = provider.get_history(symbol, d, d, resolution=Resolution.MINUTE)
+        for attempt in range(3):
+            bars = provider.get_history(symbol, d, d, resolution=Resolution.MINUTE)
+            if bars:
+                break
+            time.sleep(2.0 * (attempt + 1))  # EGW00201 rate limit 재시도
         all_bars_1m.extend(bars)
-        time.sleep(0.4)
+        time.sleep(1.2)
 
     bars_15m = aggregate_to_15min(all_bars_1m)
 
