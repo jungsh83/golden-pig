@@ -201,6 +201,14 @@ def _getResultObject(json_data):
 # Token 발급, 유효기간 1일, 6시간 이내 발급시 기존 token값 유지, 발급시 알림톡 무조건 발송
 # 모의투자인 경우  svr='vps', 투자계좌(01)이 아닌경우 product='XX' 변경하세요 (계좌번호 뒤 2자리)
 def auth(svr="prod", product=_cfg["my_prod"], url=None):
+    global token_tmp
+    # svr별 토큰 파일 분리 — paper(vps)와 live(prod)를 같은 프로세스에서 혼용해도 충돌 없음
+    token_tmp = os.path.join(
+        config_root, f"KIS{datetime.today().strftime('%Y%m%d')}_{svr}"
+    )
+    if not os.path.exists(token_tmp):
+        open(token_tmp, "w+").close()
+
     p = {
         "grant_type": "client_credentials",
     }
